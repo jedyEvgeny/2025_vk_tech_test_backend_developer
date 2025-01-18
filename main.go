@@ -1,22 +1,46 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"log"
 	"math"
+	"os"
+	"strconv"
+	"strings"
 )
 
+type coordinates struct {
+	startRow int
+	startCol int
+	endRow   int
+	endCol   int
+}
+
 var (
-	graph     map[string]map[string]float64
-	costs     map[string]float64
+	graph     map[string]map[string]uint
+	costs     map[string]uint
 	parents   map[string]string
 	processed []string
 )
 
+const (
+	errInput = "недопустимые входящие данные: %v"
+)
+
 func main() {
 	initGraph()
-	fillGraph()
+	width, height, err := fillGraph()
+	if err != nil {
+		log.Fatalf(errInput, err)
+	}
 
-	startNode, endNode := findCoordinatesStartAndFinishNodes()
+	c := readCoordinates()
+	startNode, endNode, err := c.findStartAndFinishNodes(width, height)
+	if err != nil {
+		log.Fatalf(errInput, err)
+	}
+
 	fillInitialCost(startNode)
 
 	node := findLowestCostNode(costs)
@@ -26,50 +50,99 @@ func main() {
 	printPath(path)
 }
 
-// initGraph инициализирует граф
+// initGraph инициализирует структуры данных
 func initGraph() {
-	graph = make(map[string]map[string]float64)
-	costs = make(map[string]float64)
+	graph = make(map[string]map[string]uint)
+	costs = make(map[string]uint)
 	parents = make(map[string]string)
 }
 
-// fillGraph заполняет граф и стоимость из ввода
-func fillGraph() {
+// fillGraph заполняет граф из стандартного ввода
+func fillGraph() (int, int, error) {
 	var width, height int
 	fmt.Scan(&width, &height)
+	if width <= 0 || height <= 0 {
+		return 0, 0, fmt.Errorf("размер матрицы должен быть положительным. Имеется: ширина=%d, высота=%d", width, height)
+	}
 
 	for i := 0; i < height; i++ {
 		for j := 0; j < width; j++ {
-			var weight float64
+			var weight uint
 			fmt.Scan(&weight)
 
 			if weight > 0 { // Если вес больше 0, добавляем узел в граф
 				node := fmt.Sprintf("%d %d", i, j)
 				if _, ok := graph[node]; !ok {
-					graph[node] = make(map[string]float64)
+					graph[node] = make(map[string]uint)
 				}
 
 				// Добавляем соседние узлы (вверх, вниз, влево, вправо)
 				addNeighbors(i, j, width, height, weight)
 			}
 			// Инициализация стоимости достижения узла
-			costs[fmt.Sprintf("%d %d", i, j)] = math.Inf(1)
+			costs[fmt.Sprintf("%d %d", i, j)] = math.MaxUint
 		}
 	}
+
+	return width, height, nil
 }
 
-// findCoordinatesStartAndFinishNodes формирует координаты начального
+func readCoordinates() *coordinates {
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		log.Fatal(scanner.Err())
+	}
+
+	input := scanner.Text()
+
+	elems := strings.Split(input, " ")
+	if len(elems) != 4 {
+		log.Fatalf("Ожидалось 4 координаты, имеется: %d. Также проверьте кол-во элементов в последней строке матрицы",
+			len(elems))
+	}
+
+	c := &coordinates{}
+	for idx, el := range elems {
+		num, err := strconv.Atoi(el)
+		if err != nil {
+			log.Fatalf("%d-я координата не число, а '%s': %v",
+				idx+1, el, err)
+		}
+		switch idx {
+		case 0:
+			c.startRow = num
+		case 1:
+			c.startCol = num
+		case 2:
+			c.endRow = num
+		case 3:
+			c.endCol = num
+		}
+	}
+
+	return c
+}
+
+// findStartAndFinishNodes формирует координаты начального
 // и конечного узлов графа
-func findCoordinatesStartAndFinishNodes() (string, string) {
-	var startRow, startCol, endRow, endCol int
+func (c *coordinates) findStartAndFinishNodes(width, height int) (string, string, error) {
+	if c.startCol < 0 || c.startCol >= width {
+		return "", "", fmt.Errorf("начальная координата столбца '%d' вне ширины матрицы: '%d'", c.startCol, width)
+	}
+	if c.endCol < 0 || c.endCol >= width {
+		return "", "", fmt.Errorf("конечная координата столбца '%d' вне ширины матрицы: '%d'", c.endCol, width)
+	}
+	if c.startRow < 0 || c.startRow >= height {
+		return "", "", fmt.Errorf("начальная координата строки '%d' вне высоты матрицы: '%d'", c.startRow, height)
+	}
+	if c.endRow < 0 || c.endRow >= height {
+		return "", "", fmt.Errorf("конечная координата строки '%d' вне высоты матрицы: '%d'", c.endRow, height)
+	}
 
-	fmt.Scan(&startRow, &startCol)
-	fmt.Scan(&endRow, &endCol)
+	startNode := fmt.Sprintf("%d %d", c.startRow, c.startCol)
+	endNode := fmt.Sprintf("%d %d", c.endRow, c.endCol)
 
-	startNode := fmt.Sprintf("%d %d", startRow, startCol)
-	endNode := fmt.Sprintf("%d %d", endRow, endCol)
-
-	return startNode, endNode
+	return startNode, endNode, nil
 }
 
 // fillInitialCost устанавливает начальный вес
@@ -79,7 +152,7 @@ func fillInitialCost(startNode string) {
 }
 
 // addNeighbors добавляет соседей для текущего узла в зависимости от их расположения в сетке
-func addNeighbors(row, col, width, height int, weight float64) {
+func addNeighbors(row, col, width, height int, weight uint) {
 	node := fmt.Sprintf("%d %d", row, col)
 	if row > 0 { // вверх
 		addEdge(node, fmt.Sprintf("%d %d", row-1, col), weight)
@@ -96,16 +169,16 @@ func addNeighbors(row, col, width, height int, weight float64) {
 }
 
 // addEdge добавляет ребро в граф
-func addEdge(from, to string, weight float64) {
+func addEdge(from, to string, weight uint) {
 	if _, ok := graph[from]; !ok {
-		graph[from] = make(map[string]float64)
+		graph[from] = make(map[string]uint)
 	}
 	graph[from][to] = weight
 }
 
 // findLowestCostNode находит узел с наименьшей стоимостью
-func findLowestCostNode(costs map[string]float64) string {
-	lowestCost := math.Inf(1)
+func findLowestCostNode(costs map[string]uint) string {
+	var lowestCost uint = math.MaxUint
 	lowestCostNode := ""
 
 	for node := range costs {
@@ -164,6 +237,7 @@ func retrievePath(endNode string) []string {
 	return path
 }
 
+// printPath выводит в терминал кратчайший маршрут между узлами
 func printPath(path []string) {
 	for idx, coordinates := range path {
 		fmt.Println(coordinates)
