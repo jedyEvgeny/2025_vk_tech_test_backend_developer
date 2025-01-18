@@ -70,6 +70,10 @@ func fillGraph() (int, int, error) {
 			var weight uint
 			fmt.Scan(&weight)
 
+			if weight < 0 || weight > 9 {
+				return 0, 0, fmt.Errorf("вес должен быть в диапазоне 0...9. Имеется: %d", weight)
+			}
+
 			if weight > 0 { // Если вес больше 0, добавляем узел в граф
 				node := fmt.Sprintf("%d %d", i, j)
 				if _, ok := graph[node]; !ok {
